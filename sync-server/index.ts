@@ -4,6 +4,11 @@ PouchDB.plugin(require('pouchdb-adapter-memory'));
 
 const app = express();
 
-app.use('/db', require('express-pouchdb')(PouchDB.defaults({adapter:'memory'})));
+app.use('/', require('express-pouchdb')(PouchDB.defaults({adapter:'memory'}),{
+    mode: 'fullCouchDB',
+    overrideMode: {
+      include: ['routes/fauxton']
+    }
+  }));
 
 app.listen(3000);
