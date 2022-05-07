@@ -1,0 +1,11 @@
+[workspace]
+members= [
+"common",
+"macros",
+"framework",
+"users",
+"api_core",
+"api",
+"infra",
+"sms-api",
+]

@@ -1,8 +1,15 @@
 [package]
-name = "rest_api"
+name = "common"
 version = "0.1.0"
-edition = "2021"
+edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+
 [dependencies]
+couch_rs = "0.8"
+rand="0.8.4"
+crypto="0.3.0"
+hmac="0.12.0"
+hex-literal="0.3.4"
+sha2="0.10.0"

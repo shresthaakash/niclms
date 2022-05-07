@@ -1,0 +1,22 @@
+[package]
+name = "auth"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+framework={path="../framework"}
+common={path="../common"}
+macros={path="../macros"}
+infra={path="../infra"}
+rand="0.8.4"
+rocket ={version= "0.5.0-rc.1",features=["json"]}
+couch_rs = "0.8"
+serde={version="1.0.130",features=["derive"]}
+serde_json="1.0.68"
+chrono="0.4.19"
+jsonwebtoken="7.2.0"
+bcrypt="0.10.1"
+uuid={version="0.8.2",features=["v4"]}
+reqwest = { version = "0.11", features = ["json"] }
