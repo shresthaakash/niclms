@@ -5,7 +5,9 @@ members= [
 "framework",
 "users",
 "api_core",
+"auth",
 "api",
 "infra",
 "sms-api",
+"apps",
 ]
