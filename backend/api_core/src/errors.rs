@@ -2,10 +2,11 @@ use std::{fmt,error, io::{Cursor}};
 
 use auth::account_service::AuthError;
 use couch_rs::error::CouchError;
-use rocket::{Request, Response, debug,http::{self, hyper::StatusCode}, response, serde::json::serde_json::{self}};
+use rocket::{Request, Response, debug, response, serde::json::serde_json::{self}};
 use rocket::response::Responder;
 use serde::Serializer;
 use framework::service::ServiceError;
+use http::StatusCode;
 
 #[derive(Serialize)]
 struct SerializeError<'a> {
@@ -113,41 +114,41 @@ impl<'r, 'o: 'r> Responder<'r, 'o> for ApiError {
             ApiError::NotFound(err) => {
                 debug!("request failed with {:?}", err);
 
-                (http::Status::NotFound, err)
+                (rocket::http::Status::NotFound, err)
             }
             ApiError::BadRequest(err) => {
                 debug!("request failed with {:?}", err);
 
-                (http::Status::BadRequest, err)
+                (rocket::http::Status::BadRequest, err)
             }
             ApiError::Other(err) => {
                 rocket::error!("request failed with {:?}", err);
 
-                (http::Status::InternalServerError, err)
+                (rocket::http::Status::InternalServerError, err)
             },
             ApiError::Forbidden(err)=>{
                 rocket::error!("request failed with {:?}", err);
-                (http::Status::Forbidden, err)
+                (rocket::http::Status::Forbidden, err)
             },
             ApiError::AuthFailed(err)=>{
                 rocket::error!("request failed with {:?}", err);
-                (http::Status::Unauthorized, err)
+                (rocket::http::Status::Unauthorized, err)
             },
             ApiError::RequestThrottled(e)=>{
                 rocket::error!("request failed with {:?}", e);
-                (http::Status::BadRequest, e)
+                (rocket::http::Status::BadRequest, e)
             }
             ApiError::UnprocessableEntity(e)=>{
                 rocket::error!("request failed with {:?}", e);
-                (http::Status::UnprocessableEntity, e)
+                (rocket::http::Status::UnprocessableEntity, e)
             }
             ApiError::InternalServerError(e)=>{
                 rocket::error!("request failed with {:?}", e);
-                (http::Status::InternalServerError, e)
+                (rocket::http::Status::InternalServerError, e)
             }
             ApiError::ConflictError(e)=>{
                 rocket::error!("request failed with {:?}", e);
-                (http::Status::Conflict, e)
+                (rocket::http::Status::Conflict, e)
             }
         };
 
@@ -155,7 +156,7 @@ impl<'r, 'o: 'r> Responder<'r, 'o> for ApiError {
 
         Response::build()
             .sized_body(None::<usize>, Cursor::new(err))
-            .header(http::ContentType::JSON)
+            .header(rocket::http::ContentType::JSON)
             .status(status)
             .ok()
     }

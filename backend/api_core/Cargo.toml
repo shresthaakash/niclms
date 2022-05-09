@@ -9,6 +9,7 @@ edition = "2018"
 framework={path="../framework"}
 users={path="../users"}
 auth={path="../auth"}
+apps={path="../apps"}
 rocket ={version= "0.5.0-rc.1",features=["json"]}
 couch_rs = "0.8"
 serde={version="1.0.130",features=["derive"]}
@@ -16,6 +17,7 @@ serde_json="1.0.68"
 async-trait="0.1.51"
 uuid={version="0.8.2",features=["v4"]}
 url="2.2.2"
+http="*"
 [dependencies.thiserror]
 version = "~1"
 

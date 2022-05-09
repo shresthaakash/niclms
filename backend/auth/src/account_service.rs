@@ -8,7 +8,6 @@ use framework::{
     service::ServiceError,
     repository::RepoError
 };
-use rocket::http::hyper::StatusCode;
 use serde_json::{Map, Value};
 use std::error;
 use common::get_code;

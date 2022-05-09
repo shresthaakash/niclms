@@ -11,9 +11,9 @@ use couch_rs::{
     error::CouchError,
     types::{document::DocumentId, find::FindQuery},
 };
-use rocket::http::hyper::StatusCode;
 use serde_json::{Map, Value};
 use std::error::Error;
+use http::StatusCode;
 
 #[derive(Debug)]
 pub enum RepoError {
