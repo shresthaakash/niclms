@@ -1,5 +1,4 @@
-use std::marker::PhantomData;
-
+use std::{collections::HashMap, marker::PhantomData, sync::{Arc}};
 use super::entity::{Entity, EntityUpdate};
 use crate::error_msgs::{
     FAILED_TO_CONNECT, FORBIDDEN_ACCESS, INVALID_OPERATION, RESOURCE_CONFLICT, RESOURCE_NOT_FOUND,
@@ -11,6 +10,7 @@ use couch_rs::{
     error::CouchError,
     types::{document::DocumentId, find::FindQuery},
 };
+use rocket::tokio::sync::Mutex;
 use serde_json::{Map, Value};
 use std::error::Error;
 use http::StatusCode;
@@ -44,6 +44,7 @@ impl From<CouchError> for RepoError {
 
 pub struct Repository<T: Entity, U: EntityUpdate<T>> {
     pub collection: String,
+    pub db_map:Arc<Mutex<HashMap<String,Arc<Database>>>>,
     pub phantom: PhantomData<T>,
     pub phantomu: PhantomData<U>,
 }
@@ -52,6 +53,7 @@ impl<T: Entity, U: EntityUpdate<T>> Repository<T, U> {
     pub fn new(collection: String) -> Self {
         Repository {
             collection,
+            db_map:Arc::new(Mutex::new(HashMap::new())),
             phantom: PhantomData::default(),
             phantomu: PhantomData::default(),
         }
@@ -65,12 +67,12 @@ pub trait IRepository: Sync + Send {
     type EntityType: Entity;
     type Update: std::marker::Send + std::marker::Sync + EntityUpdate<Self::EntityType>;
 
-    async fn db(&self) -> Result<Database, CouchError>;
+    async fn  db(&self,db_name:String)->Result<Arc<Database>,CouchError>;
 
     fn collection(&self) -> String;
 
-    async fn find_all(&self, query: FindQuery) -> Result<Vec<Self::EntityType>, RepoError> {
-        let db = self.db().await?;
+    async fn find_all(&self, db_name:String,query: FindQuery) -> Result<Vec<Self::EntityType>, RepoError> {
+        let db = self.db(db_name).await?;
 
         let mut q = query;
         q.selector = self.set_entity_selector(q.selector);
@@ -78,11 +80,11 @@ pub trait IRepository: Sync + Send {
         Ok(results.rows)
     }
 
-    async fn find_one(&self, query: Value) -> Result<Option<Self::EntityType>, RepoError> {
+    async fn find_one(&self, db_name:String,query: Value) -> Result<Option<Self::EntityType>, RepoError> {
         println!("{:?}", &query);
         let mut q = FindQuery::new(query).limit(1).skip(0);
         q.selector = self.set_entity_selector(q.selector);
-        let db = self.db().await?;
+        let db = self.db(db_name).await?;
         let results = db
             .find::<Self::EntityType>(&q)
             .await
@@ -90,8 +92,8 @@ pub trait IRepository: Sync + Send {
         Ok(results)
     }
 
-    async fn create(&self, item: &mut Self::EntityType) -> Result<Self::EntityType, RepoError> {
-        let db = self.db().await?;
+    async fn create(&self, db_name:String,item: &mut Self::EntityType) -> Result<Self::EntityType, RepoError> {
+        let db = self.db(db_name).await?;
         item.set_entity_type(&self.collection());
         let saved = db.create(item).await?;
         let i = db.get::<Self::EntityType>(&saved.id).await?;
@@ -100,10 +102,11 @@ pub trait IRepository: Sync + Send {
 
     async fn update(
         &self,
+        db_name:String,
         doc_id: DocumentId,
         update: Self::Update,
     ) -> Result<Self::EntityType, RepoError> {
-        let db = self.db().await?;
+        let db = self.db(db_name).await?;
 
         let mut updated = db
             .get::<Self::EntityType>(&doc_id)
@@ -122,10 +125,10 @@ pub trait IRepository: Sync + Send {
         Ok(saved)
     }
 
-    async fn delete_where(&self, query: Value) -> Result<i32, RepoError> {
+    async fn delete_where(&self,db_name:String, query: Value) -> Result<i32, RepoError> {
         let q = FindQuery::new(query).limit(1000000).skip(0);
-        let db = self.db().await?;
-        let docs = self.find_all(q).await?;
+        let db = self.db(db_name.clone()).await?;
+        let docs = self.find_all(db_name,q).await?;
         let mut deleted = 0;
         for doc in docs {
             db.remove(&doc).await;
@@ -136,12 +139,13 @@ pub trait IRepository: Sync + Send {
 
     async fn update_where(
         &self,
+        db_name:String,
         query: Value,
         update: Self::Update,
     ) -> Result<Vec<Self::EntityType>, RepoError> {
         let q = FindQuery::new(query).limit(1000000).skip(0);
-        let db = self.db().await?;
-        let docs = self.find_all(q).await?;
+        let db = self.db(db_name.clone()).await?;
+        let docs = self.find_all(db_name,q).await?;
         let mut results = Vec::<Self::EntityType>::new();
         for mut doc in docs {
             let updated = update.apply_update(&mut doc);
@@ -152,15 +156,15 @@ pub trait IRepository: Sync + Send {
         Ok(results)
     }
 
-    async fn delete(&self, doc_id: DocumentId) -> Result<bool, RepoError> {
-        let db = self.db().await?;
+    async fn delete(&self,db_name:String, doc_id: DocumentId) -> Result<bool, RepoError> {
+        let db = self.db(db_name).await?;
         let saved = db.get::<Self::EntityType>(&doc_id).await?;
         let res = db.remove(&saved).await;
         Ok(res)
     }
 
-    async fn get_by_id(&self, doc_id: DocumentId) -> Result<Self::EntityType, RepoError> {
-        let db = self.db().await?;
+    async fn get_by_id(&self,db_name:String, doc_id: DocumentId) -> Result<Self::EntityType, RepoError> {
+        let db = self.db(db_name).await?;
         let i = db.get::<Self::EntityType>(&doc_id).await?;
         Ok(i)
     }
@@ -185,14 +189,25 @@ impl<T: Entity, U: EntityUpdate<T>> IRepository for Repository<T, U> {
     type EntityType = T;
     type Update = U;
 
-    async fn db(&self) -> Result<Database, CouchError> {
+    async fn db(&self,db_name:String) -> Result<Arc<Database>, CouchError> {
         let host = std::env::var("DB_URL").unwrap();
         let user = std::env::var("DB_USERNAME").unwrap();
         let password = std::env::var("DB_PASSWORD").unwrap();
-        let dbname = std::env::var("DB_NAME").unwrap();
-        let client = couch_rs::Client::new(&host, &user, &password)?;
-        let db = client.db(&dbname).await?;
-        Ok(db)
+      //  let dmap_clone=Arc::clone(&self.db_map);
+        let mut dmap=(&self.db_map).lock().await;
+        if !dmap.contains_key(&db_name) {
+            println!("Creating Connection");
+            let client = couch_rs::Client::new(&host, &user, &password)?;
+            let db=client.db(&db_name).await?;
+            dmap.insert(db_name.clone(),Arc::new(db));
+            
+        }
+        if let Some(d)=dmap.get(&db_name){
+            return Ok(Arc::clone(d));
+        }
+        Err(CouchError::new("Failed Db Conn".into(), StatusCode::NOT_FOUND))
+
+
     }
 
     fn collection(&self) -> String {

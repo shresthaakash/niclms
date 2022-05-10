@@ -2,13 +2,14 @@ use super::{
     entity::{Entity, EntityUpdate},
     repository::Repository,
 };
-use crate::repository::IRepository;
+use crate::{repository::IRepository, resolvers::IResolver};
 use crate::repository::RepoError;
 use async_trait::async_trait;
 use couch_rs::{
     types::{document::DocumentId, find::FindQuery},
 };
-use std::error::Error;
+use rocket::tokio::sync::Mutex;
+use std::{error::Error, sync::Arc};
 
 #[derive(Debug)]
 pub enum ServiceError {
@@ -41,46 +42,59 @@ impl From<RepoError> for ServiceError {
 
 pub struct Service<T: Entity, U: EntityUpdate<T>> {
     pub repo: Repository<T, U>,
+    pub resolver: Arc<Mutex<dyn IResolver<String,String>>>,
 }
 
 unsafe impl<T: Entity, U: EntityUpdate<T>> Sync for Service<T, U> {}
 
 impl<T: Entity, U: EntityUpdate<T>> Service<T, U> {
-    pub fn new(repo: Repository<T, U>) -> Self {
-        Service { repo }
+    pub fn new(repo: Repository<T, U>,resolver: Arc<Mutex<dyn IResolver<String,String>>>) -> Self {
+        Service { repo,resolver }
     }
 }
 
 #[async_trait]
 pub trait IService<T: Entity + 'static, U: EntityUpdate<T> + 'static> {
     fn repo(&self) -> &Repository<T, U>;
+    fn get_resolver(&self) -> &Arc<Mutex<dyn IResolver<String,String>>>;
 
-    async fn get_all(&self, query: FindQuery) -> Result<Vec<T>, ServiceError> {
+    async fn get_all(&self, app_id: String,query: FindQuery) -> Result<Vec<T>, ServiceError> {
         let repo = self.repo();
-        let res = repo.find_all(query).await?;
+        let db_name = self.db_name(app_id).await;
+        let res = repo.find_all(db_name,query).await?;
         return Ok(res);
     }
 
-    async fn create(&self, item: &mut T) -> Result<T, ServiceError> {
+    async fn create(&self, app_id: String,item: &mut T) -> Result<T, ServiceError> {
         let repo = self.repo();
-        let res = repo.create(item).await?;
+        let db_name = self.db_name(app_id).await;
+        let res = repo.create(db_name,item).await?;
         Ok(res)
     }
-    async fn update(&self, doc_id: DocumentId, item: U) -> Result<T, ServiceError> {
+    async fn update(&self, app_id: String,doc_id: DocumentId, item: U) -> Result<T, ServiceError> {
         let repo = self.repo();
-        let res = repo.update(doc_id, item).await?;
-        Ok(res)
-    }
-
-    async fn delete(&self, doc_id: DocumentId) -> Result<bool, ServiceError> {
-        let repo = self.repo();
-        let res = repo.delete(doc_id).await?;
+        let db_name = self.db_name(app_id).await;
+        let res = repo.update(db_name,doc_id, item).await?;
         Ok(res)
     }
 
-    async fn get_by_id(&self, doc_id: DocumentId) -> Result<T, ServiceError> {
+    async fn delete(&self, app_id: String,doc_id: DocumentId) -> Result<bool, ServiceError> {
         let repo = self.repo();
-        let res = repo.get_by_id(doc_id).await?;
+        let db_name = self.db_name(app_id).await;
+        let res = repo.delete(db_name,doc_id).await?;
         Ok(res)
+    }
+
+    async fn get_by_id(&self, app_id: String,doc_id: DocumentId) -> Result<T, ServiceError> {
+        let repo = self.repo();
+        let db_name = self.db_name(app_id).await;
+        let res = repo.get_by_id(db_name,doc_id).await?;
+        Ok(res)
+    }
+
+    async fn db_name(&self, app_id: String) -> String {
+        let mut resolver = self.get_resolver().lock().await;
+        let db = resolver.resolve(app_id).await.unwrap();
+        db
     }
 }

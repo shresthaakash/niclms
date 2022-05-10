@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use apps::{app_repository, app_service::{AppService, app_service_factory}};
+use framework::resolvers::IResolver;
 #[derive(Clone)]
 pub struct AppId(String);
 
@@ -24,19 +25,26 @@ impl  AppResolver {
         }
      }
 
-     pub async fn resolve(&mut self,domain:&str)->Option<AppId>{
-
-       let cached = self.domain_app_map.get(domain);
-       if let None = cached {
-           let app = self.app_service.get_by_domain(domain).await;
-           if let Some(a) = app {
-               for domain in a.domains {
-                   self.domain_app_map.insert(domain, AppId(a._id.clone()));
-               }
-           }
-           
-       }
-       self.domain_app_map.get(domain).map(|a|a.clone())
      
-     }
 }
+
+impl IResolver<String,AppId> for AppResolver {
+
+     async fn resolve(&mut self,domain:&str)->Option<AppId>{
+
+        let cached = self.domain_app_map.get(domain);
+        if let None = cached {
+            let app = self.app_service.get_by_domain(domain).await;
+            if let Some(a) = app {
+                for domain in a.domains {
+                    self.domain_app_map.insert(domain, AppId(a._id.clone()));
+                }
+            }
+            
+        }
+        self.domain_app_map.get(domain).map(|a|a.clone())
+      
+      }
+
+}
+
